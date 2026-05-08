@@ -15,13 +15,14 @@ import {
   updateLocation,
   searchDoctors,
   getNearbyDoctors,
+  disableAppointement,
   deleteMyAccount,
   blockUser,
   unblockUser,
   getBlockedUsers,
 } from "../controller/user.controller.js";
 import { registerFCMToken, removeFCMToken } from "../controller/fcm.controller.js";
-import { protect, isAdmin } from "../middleware/auth.middleware.js";
+import { protect, isAdmin, isDoctor } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
 
 const router = express.Router();
@@ -41,7 +42,7 @@ router.delete("/me/dependents/:dependentId", protect, deleteDependent);
 router.get("/blocked", protect, getBlockedUsers);
 router.post("/block/:targetUserId", protect, blockUser);
 router.delete("/block/:targetUserId", protect, unblockUser);
-
+router.post("/doctor/disable-appointement", isDoctor, disableAppointement)
 router.get("/role/doctor/nearby", getNearbyDoctors);
 router.get("/role/:role", getUsersByRole);
 router.get("/dashboard/overview", protect, isAdmin, getDashboardOverview);

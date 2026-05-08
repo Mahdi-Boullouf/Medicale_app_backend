@@ -75,6 +75,8 @@ export const register = catchAsync(async (req, res) => {
       role,
       specialty,
       medicalLicenseNumber,
+      wilaya, // ✅ NEW
+      commune, // ✅ NEW
       refferalCode,
     } = req.body;
 
@@ -101,11 +103,19 @@ export const register = catchAsync(async (req, res) => {
       );
     }
 
-    if (roleNormalized === "doctor" && !medicalLicenseNumber) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        "Medical license number is required for doctors",
-      );
+    if (roleNormalized === "doctor") {
+      if (!medicalLicenseNumber) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          "Medical license number is required for doctors",
+        );
+      }
+      if (!wilaya) {
+        throw new AppError(httpStatus.BAD_REQUEST, "Wilaya is required for doctors");
+      }
+      if (!commune) {
+        throw new AppError(httpStatus.BAD_REQUEST, "Commune is required for doctors");
+      }
     }
 
     //fetch referral enable status
@@ -203,6 +213,8 @@ export const register = catchAsync(async (req, res) => {
           specialty: roleNormalized === "doctor" ? specialty : undefined,
           medicalLicenseNumber:
             roleNormalized === "doctor" ? medicalLicenseNumber : undefined,
+          wilaya: wilaya || "", // ✅ NEW
+          commune: commune || "", // ✅ NEW
           verificationInfo: { token: "" },
           referralCode:
             referral && roleNormalized === "doctor" ? referral._id : null,
@@ -258,19 +270,21 @@ export const register = catchAsync(async (req, res) => {
             fromUserId: newUser._id,
             type: "doctor_signup",
             title: "New Doctor Registered",
-            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} has joined our platform.`,
-            meta: { doctorId: newUser._id, doctorName: newUser.fullName },
+            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} from ${newUser.wilaya}, ${newUser.commune} has joined our platform.`,
+            meta: { doctorId: newUser._id, doctorName: newUser.fullName, wilaya: newUser.wilaya, commune: newUser.commune },
           });
 
           //sent notifaication by socket too (if online)
           io.to(patient._id.toString()).emit("notification:newDoctor", {
             type: "doctor_signup",
             title: "New Doctor Registered",
-            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} has joined our platform.`,
+            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} from ${newUser.wilaya}, ${newUser.commune} has joined our platform.`,
             meta: {
               doctorId: newUser._id,
               doctorName: newUser.fullName,
               specialty: newUser.specialty,
+              wilaya: newUser.wilaya,
+              commune: newUser.commune,
             },
           });
         }),

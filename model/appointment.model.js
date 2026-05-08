@@ -101,6 +101,11 @@ const appointmentSchema = new Schema(
       type: Number,
       default: 0,
     },
+    // ✅ NEW: Track 1-hour appointment reminder
+    reminderSent: {
+      type: Boolean,
+      default: false,
+    },
     // ✅ NEW: Admin commission tracking
     adminEarning: {
       type: Number,

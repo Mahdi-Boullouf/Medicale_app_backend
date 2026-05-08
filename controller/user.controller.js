@@ -181,7 +181,20 @@ export const getProfile = catchAsync(async (req, res) => {
     data: userData,
   });
 });
-
+export const disableAppointement = catchAsync(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+  user.isOnlineAppointmentAvailable = false;
+  await user.save();
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Appointement disabled",
+    data: user,
+  });
+});
 //search doctor by name, specialty, location
 export const searchDoctors = catchAsync(async (req, res) => {
   const search = req.query?.search?.toString().trim();
@@ -368,7 +381,7 @@ export const getNearbyDoctors = catchAsync(async (req, res) => {
  */
 export const getUsersByRole = catchAsync(async (req, res) => {
   const { role } = req.params;
-  const { page, limit, sortBy, status, search } = req.query;
+  const { page, limit, sortBy, status, search, wilaya, commune } = req.query;
 
   // Validate role
   const allowedRoles = ["patient", "doctor", "admin"];
@@ -406,6 +419,16 @@ export const getUsersByRole = catchAsync(async (req, res) => {
       { email: regex },
       { address: regex },
     ];
+  }
+
+  // ✅ New Filter logic for doctors
+  if (role === "doctor") {
+    if (wilaya && wilaya.trim() !== "") {
+      matchFilter.wilaya = wilaya;
+    }
+    if (commune && commune.trim() !== "") {
+      matchFilter.commune = commune;
+    }
   }
 
   // Count total
@@ -760,6 +783,8 @@ export const updateProfile = catchAsync(async (req, res) => {
     weeklySchedule,
     visitingHoursText,
     medicalLicenseNumber,
+    wilaya, // ✅ NEW
+    commune, // ✅ NEW
     isVideoCallAvailable, // ✅ NEW: Support for main key
     isVideoAvailable, // ✅ NEW: Support for redundant key 1
     isAvailable, // ✅ NEW: Support for redundant key 2
@@ -781,6 +806,8 @@ export const updateProfile = catchAsync(async (req, res) => {
   if (address !== undefined) {
     user.address = String(address).trim();
   }
+  if (wilaya !== undefined) user.wilaya = String(wilaya).trim(); // ✅ NEW
+  if (commune !== undefined) user.commune = String(commune).trim(); // ✅ NEW
 
   if (experienceYears !== undefined) {
     const exp = asNumber(experienceYears);

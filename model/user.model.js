@@ -51,6 +51,7 @@ const dependentSchema = new Schema({
 
 const userSchema = new Schema(
   {
+
     fullName: { type: String, trim: true, required: true },
 
     email: { type: String, trim: true, unique: true },
@@ -58,7 +59,8 @@ const userSchema = new Schema(
     password: { type: String, select: false },
 
     username: { type: String, trim: true },
-
+    wilaya: { type: String, trim: true, required: false },
+    commune: { type: String, trim: true, required: false },
     phone: {
       type: String,
       trim: true,
@@ -192,12 +194,12 @@ const userSchema = new Schema(
 
     country: { type: String, default: "" },
 
-    referralCode: 
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "ReferralCode",
-        default: null,
-      },
+    referralCode:
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ReferralCode",
+      default: null,
+    },
 
     dependents: { type: [dependentSchema], default: [] },
 
@@ -231,10 +233,10 @@ const userSchema = new Schema(
     // Unified device tokens (Hybrid Approach)
     fcmToken: { type: String, default: null, trim: true }, // Legacy single token
     voipToken: { type: String, default: null, trim: true }, // Legacy single VoIP token
-    devicePlatform: { 
-      type: String, 
-      enum: ["android", "ios", "web", null], 
-      default: null 
+    devicePlatform: {
+      type: String,
+      enum: ["android", "ios", "web", null],
+      default: null
     },
 
     // Modern Multi-Device Management

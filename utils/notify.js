@@ -66,6 +66,7 @@ export const createNotification = async ({
       "appointment_cancelled",
       "appointment_completed",
       "appointment_status_change",
+      "appointment_reminder",
       "post_liked",
       "post_commented",
       "reel_liked",

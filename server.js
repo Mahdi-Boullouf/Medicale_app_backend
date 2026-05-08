@@ -10,6 +10,10 @@ import cookieParser from "cookie-parser";
 import router from "./mainroute/index.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import { initCronJobs } from "./utils/cron.js";
+
+// Initialize Cron Jobs
+initCronJobs();
 import chalk from "chalk";
 import morgan from "morgan";
 
