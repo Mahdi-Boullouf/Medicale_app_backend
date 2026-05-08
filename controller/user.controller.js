@@ -181,17 +181,17 @@ export const getProfile = catchAsync(async (req, res) => {
     data: userData,
   });
 });
-export const disableAppointement = catchAsync(async (req, res) => {
+export const toggleAppointement = catchAsync(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
-  user.isOnlineAppointmentAvailable = false;
+  user.isOnlineAppointmentAvailable = !user.isOnlineAppointmentAvailable;
   await user.save();
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: "Appointement disabled",
+    message: `Appointement ${user.isOnlineAppointmentAvailable ? "enabled" : "disabled"}`,
     data: user,
   });
 });

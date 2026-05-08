@@ -15,7 +15,7 @@ import {
   updateLocation,
   searchDoctors,
   getNearbyDoctors,
-  disableAppointement,
+  toggleAppointement,
   deleteMyAccount,
   blockUser,
   unblockUser,
@@ -42,7 +42,7 @@ router.delete("/me/dependents/:dependentId", protect, deleteDependent);
 router.get("/blocked", protect, getBlockedUsers);
 router.post("/block/:targetUserId", protect, blockUser);
 router.delete("/block/:targetUserId", protect, unblockUser);
-router.post("/doctor/disable-appointement", isDoctor, disableAppointement)
+router.post("/doctor/toggle-appointement", isDoctor, toggleAppointement)
 router.get("/role/doctor/nearby", getNearbyDoctors);
 router.get("/role/:role", getUsersByRole);
 router.get("/dashboard/overview", protect, isAdmin, getDashboardOverview);
