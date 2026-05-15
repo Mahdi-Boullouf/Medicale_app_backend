@@ -316,7 +316,7 @@ export const getAvailableAppointments = catchAsync(async (req, res) => {
     );
   }
 
-  const doctor = await User.findById(doctorId).select("role weeklySchedule");
+  const doctor = await User.findById(doctorId).select("role weeklySchedule appointmentsDisabled vacations");
   if (!doctor || doctor.role !== "doctor") {
     throw new AppError(httpStatus.NOT_FOUND, "Doctor not found");
   }
@@ -336,6 +336,42 @@ export const getAvailableAppointments = catchAsync(async (req, res) => {
     "saturday",
   ];
   const dayName = dayNames[dateObj.getDay()];
+
+  if (doctor.appointmentsDisabled === true) {
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Appointments are disabled for this doctor",
+      data: {
+        date,
+        day: dayName,
+        slots: [],
+      },
+    });
+  }
+
+  // ✅ NEW: Vacation Check
+  const isOnVacation = (doctor.vacations || []).some((v) => {
+    const start = new Date(v.startDate);
+    const end = new Date(v.endDate);
+    // Set end to end of day to be inclusive
+    end.setHours(23, 59, 59, 999);
+    start.setHours(0, 0, 0, 0);
+    return dateObj >= start && dateObj <= end;
+  });
+
+  if (isOnVacation) {
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Doctor is on vacation during this period",
+      data: {
+        date,
+        day: dayName,
+        slots: [],
+      },
+    });
+  }
 
   const weeklySchedule = doctor.weeklySchedule || [];
   const daySchedule = weeklySchedule.find(

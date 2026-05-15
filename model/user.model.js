@@ -39,6 +39,15 @@ const dayScheduleSchema = new Schema(
   { _id: false },
 );
 
+const vacationSchema = new Schema(
+  {
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    note: { type: String, trim: true },
+  },
+  { _id: true },
+);
+
 const dependentSchema = new Schema({
   fullName: { type: String, trim: true, required: true },
   relationship: { type: String, trim: true },
@@ -60,6 +69,7 @@ const userSchema = new Schema(
 
     username: { type: String, trim: true },
     wilaya: { type: String, trim: true, required: false },
+    appointmentsDisabled: { type: Boolean, default: false },
     commune: { type: String, trim: true, required: false },
     phone: {
       type: String,
@@ -108,6 +118,8 @@ const userSchema = new Schema(
       default: true,
       description: "Whether doctor accepts online appointments",
     },
+
+    vacations: { type: [vacationSchema], default: [] },
 
     // gender: {
     //   type: String,
@@ -300,6 +312,16 @@ userSchema.pre("save", async function (next) {
             new Error(`Invalid slot on ${d.day}: start must be < end`),
           );
         }
+      }
+    }
+  }
+
+  if (this.isModified("vacations") && Array.isArray(this.vacations)) {
+    for (const v of this.vacations) {
+      if (v.startDate >= v.endDate) {
+        return next(
+          new Error(`Invalid vacation: startDate must be before endDate`),
+        );
       }
     }
   }

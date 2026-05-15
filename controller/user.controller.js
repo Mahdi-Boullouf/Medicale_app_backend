@@ -109,6 +109,29 @@ const sanitizeDegrees = (input) => {
     .filter(Boolean);
 };
 
+const sanitizeVacations = (input) => {
+  if (!Array.isArray(input)) return undefined;
+  return input
+    .map((v) => {
+      const startDate = v?.startDate ? new Date(v.startDate) : null;
+      const endDate = v?.endDate ? new Date(v.endDate) : null;
+      if (
+        !startDate ||
+        isNaN(startDate.getTime()) ||
+        !endDate ||
+        isNaN(endDate.getTime())
+      ) {
+        return null;
+      }
+      return {
+        startDate,
+        endDate,
+        note: v?.note ? String(v.note).trim() : undefined,
+      };
+    })
+    .filter(Boolean);
+};
+
 const sanitizeSpecialties = (input) => {
   if (!Array.isArray(input)) return undefined;
   return input
@@ -181,7 +204,7 @@ export const getProfile = catchAsync(async (req, res) => {
     data: userData,
   });
 });
-export const toggleAppointement = catchAsync(async (req, res) => {
+export const toggleAppointment = catchAsync(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
@@ -191,7 +214,7 @@ export const toggleAppointement = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: `Appointement ${user.isOnlineAppointmentAvailable ? "enabled" : "disabled"}`,
+    message: `Appointment ${user.isOnlineAppointmentAvailable ? "enabled" : "disabled"}`,
     data: user,
   });
 });
@@ -782,6 +805,8 @@ export const updateProfile = catchAsync(async (req, res) => {
     fees,
     weeklySchedule,
     visitingHoursText,
+    appointmentsDisabled,
+    vacations, // ✅ NEW
     medicalLicenseNumber,
     wilaya, // ✅ NEW
     commune, // ✅ NEW
@@ -808,6 +833,9 @@ export const updateProfile = catchAsync(async (req, res) => {
   }
   if (wilaya !== undefined) user.wilaya = String(wilaya).trim(); // ✅ NEW
   if (commune !== undefined) user.commune = String(commune).trim(); // ✅ NEW
+  if (appointmentsDisabled !== undefined) {
+    user.appointmentsDisabled = parseBooleanInput(appointmentsDisabled);
+  }
 
   if (experienceYears !== undefined) {
     const exp = asNumber(experienceYears);
@@ -939,6 +967,9 @@ export const updateProfile = catchAsync(async (req, res) => {
       user.medicalLicenseNumber = license === "" ? undefined : license;
     }
 
+    const v = sanitizeVacations(parseIfString(vacations));
+    if (v !== undefined) user.vacations = v;
+
     // ✅ NEW: Handle Video Call Availability persistence
     // We check all potential keys for maximum compatibility with Flutter frontend
     const availabilityInput =
@@ -962,7 +993,9 @@ export const updateProfile = catchAsync(async (req, res) => {
         user.isOnlineAppointmentAvailable = boolVal;
       }
     }
+
   }
+
 
   await user.save();
 
@@ -1409,7 +1442,36 @@ export const deleteMyAccount = catchAsync(async (req, res) => {
     data: null,
   });
 });
+export const updateAppointmentAvailability = catchAsync(async (req, res) => {
+  if (req.user.role !== "doctor") {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Only doctors can update appointment availability",
+    );
+  }
 
+  const { appointmentsDisabled } = req.body;
+  const boolVal = parseBooleanInput(appointmentsDisabled);
+
+  if (boolVal === undefined) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid availability value provided");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { appointmentsDisabled: boolVal },
+    { new: true },
+  );
+
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, "User not found");
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Appointment availability updated successfully",
+    data: user,
+  });
+});
 //update location for client
 export const updateLocation = catchAsync(async (req, res) => {
   const { lat, lng } = req.body;

@@ -11,11 +11,12 @@ import {
   addDependent,
   updateDependent,
   deleteDependent,
+  updateAppointmentAvailability,
   deleteUser,
   updateLocation,
   searchDoctors,
   getNearbyDoctors,
-  toggleAppointement,
+  toggleAppointment,
   deleteMyAccount,
   blockUser,
   unblockUser,
@@ -42,7 +43,8 @@ router.delete("/me/dependents/:dependentId", protect, deleteDependent);
 router.get("/blocked", protect, getBlockedUsers);
 router.post("/block/:targetUserId", protect, blockUser);
 router.delete("/block/:targetUserId", protect, unblockUser);
-router.post("/doctor/toggle-appointement", isDoctor, toggleAppointement)
+router.post("/doctor/toggle-appointment", protect, isDoctor, toggleAppointment)
+router.put("/doctor/available-appointments", protect, isDoctor, updateAppointmentAvailability)
 router.get("/role/doctor/nearby", getNearbyDoctors);
 router.get("/role/:role", getUsersByRole);
 router.get("/dashboard/overview", protect, isAdmin, getDashboardOverview);
