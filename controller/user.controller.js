@@ -12,6 +12,8 @@ import catchAsync from "../utils/catchAsync.js";
 import { DoctorReview } from "../model/doctorReview.model.js";
 import { createNotification } from "../utils/notify.js";
 
+const testingMode = false;
+
 /**
  * Helpers
  */
@@ -338,12 +340,10 @@ export const getNearbyDoctors = catchAsync(async (req, res) => {
         distanceKm: { $multiply: [R, "$c"] },
       },
     },
-    // Filter by max distance
-    {
-      $match: {
-        distanceKm: { $lte: maxDistance },
-      },
-    },
+    // Filter by max distance (skipped in testingMode)
+    ...(!testingMode
+      ? [{ $match: { distanceKm: { $lte: maxDistance } } }]
+      : []),
     // Lookup ratings
     {
       $lookup: {
@@ -382,6 +382,7 @@ export const getNearbyDoctors = catchAsync(async (req, res) => {
         location: 1,
         degrees: 1,
         isVideoCallAvailable: 1,
+        isOnlineAppointmentAvailable: 1,
         weeklySchedule: 1,
         address: 1,
         ratingSummary: 1, // Keep calculated rating
