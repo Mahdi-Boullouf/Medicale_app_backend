@@ -353,8 +353,8 @@ export const login = catchAsync(async (req, res) => {
     process.env.JWT_REFRESH_EXPIRES_IN,
   );
 
-  user.refreshToken = refreshToken;
-  await user.save();
+  // Use targeted update to avoid running the full pre-save middleware chain
+  await User.findByIdAndUpdate(user._id, { refreshToken });
 
   res.cookie("refreshToken", refreshToken, {
     secure: true,
@@ -362,6 +362,9 @@ export const login = catchAsync(async (req, res) => {
     sameSite: "none",
     maxAge: 1000 * 60 * 60 * 24 * 365,
   });
+
+  const { password: _pw, refreshToken: _rt, verificationInfo: _vi, password_reset_token: _prt, ...restUser } = user.toObject();
+  const safeUser = { ...restUser, password: "", refreshToken: "", verificationInfo: "", password_reset_token: "" };
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -372,7 +375,7 @@ export const login = catchAsync(async (req, res) => {
       refreshToken,
       role: user.role,
       _id: user._id,
-      user,
+      user: safeUser,
     },
   });
 });
