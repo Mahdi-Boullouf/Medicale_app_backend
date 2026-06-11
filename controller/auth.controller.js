@@ -8,7 +8,7 @@ import { sendEmail, otpEmailTemplate } from "../utils/sendEmail.js";
 import { User } from "../model/user.model.js";
 import { ReferralCode } from "../model/referralCode.model.js";
 import mongoose from "mongoose";
-import { createNotification } from "../utils/notify.js";
+import { createNotification, createBulkNotification } from "../utils/notify.js";
 import { io } from "../server.js";
 import AppSetting from "../model/appSeeting.model.js";
 
@@ -260,35 +260,46 @@ export const register = catchAsync(async (req, res) => {
     // FIXED: Only send notification if the new user is a DOCTOR
     console.log('🔵 [REGISTER] Checking if notifications needed for role:', roleNormalized);
     if (roleNormalized === 'doctor') {
-      console.log('🔵 [REGISTER] Sending notifications to patients about new doctor');
-      //TODO: sent notification to all patients about new doctor registration
-      const patients = await User.find({ role: "patient" });
-      await Promise.all(
-        patients.map(async (patient) => {
-          createNotification({
-            userId: patient._id,
+      console.log('🔵 [REGISTER] Broadcasting new-doctor notification to patients (background)');
+      const content = `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} from ${newUser.wilaya}, ${newUser.commune} has joined our platform.`;
+      const meta = {
+        doctorId: newUser._id,
+        doctorName: newUser.fullName,
+        specialty: newUser.specialty,
+        wilaya: newUser.wilaya,
+        commune: newUser.commune,
+      };
+
+      // Fire-and-forget: don't block the registration response on a fan-out to
+      // every patient. One bulk insert + socket emits run in the background.
+      (async () => {
+        try {
+          const patients = await User.find({ role: "patient" })
+            .select("_id")
+            .lean();
+          const patientIds = patients.map((p) => p._id);
+
+          await createBulkNotification({
+            userIds: patientIds,
             fromUserId: newUser._id,
             type: "doctor_signup",
             title: "New Doctor Registered",
-            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} from ${newUser.wilaya}, ${newUser.commune} has joined our platform.`,
-            meta: { doctorId: newUser._id, doctorName: newUser.fullName, wilaya: newUser.wilaya, commune: newUser.commune },
+            content,
+            meta,
           });
 
-          //sent notifaication by socket too (if online)
-          io.to(patient._id.toString()).emit("notification:newDoctor", {
-            type: "doctor_signup",
-            title: "New Doctor Registered",
-            content: `A new doctor, Dr. ${newUser.fullName}, specialized in ${newUser.specialty} from ${newUser.wilaya}, ${newUser.commune} has joined our platform.`,
-            meta: {
-              doctorId: newUser._id,
-              doctorName: newUser.fullName,
-              specialty: newUser.specialty,
-              wilaya: newUser.wilaya,
-              commune: newUser.commune,
-            },
-          });
-        }),
-      );
+          for (const id of patientIds) {
+            io.to(id.toString()).emit("notification:newDoctor", {
+              type: "doctor_signup",
+              title: "New Doctor Registered",
+              content,
+              meta,
+            });
+          }
+        } catch (err) {
+          console.error("❌ [REGISTER] Background patient broadcast failed:", err.message);
+        }
+      })();
     } else {
       console.log('🔵 [REGISTER] Skipping notifications (user is not a doctor)');
     }

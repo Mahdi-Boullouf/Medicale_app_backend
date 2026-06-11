@@ -113,26 +113,36 @@ export const getMyChats = catchAsync(async (req, res) => {
 
     if (!seenPairIds.has(participantIds)) {
       seenPairIds.add(participantIds);
-
-      // Calculate unread count
-      const unreadCount = await Message.countDocuments({
-        chatId: chat._id,
-        sender: { $ne: meId },
-        seenBy: { $ne: meId },
-      });
-
-      uniqueChats.push({
-        ...chat,
-        unreadCount,
-      });
+      uniqueChats.push(chat);
     }
   }
+
+  // Unread counts for all chats in ONE aggregation instead of one query per chat.
+  const chatIds = uniqueChats.map((c) => c._id);
+  const unreadAgg = chatIds.length
+    ? await Message.aggregate([
+        {
+          $match: {
+            chatId: { $in: chatIds },
+            sender: { $ne: meId },
+            seenBy: { $ne: meId },
+          },
+        },
+        { $group: { _id: "$chatId", count: { $sum: 1 } } },
+      ])
+    : [];
+  const unreadByChat = new Map(unreadAgg.map((u) => [String(u._id), u.count]));
+
+  const chatsWithUnread = uniqueChats.map((chat) => ({
+    ...chat,
+    unreadCount: unreadByChat.get(String(chat._id)) || 0,
+  }));
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: "Chats fetched",
-    data: uniqueChats,
+    data: chatsWithUnread,
   });
 });
 

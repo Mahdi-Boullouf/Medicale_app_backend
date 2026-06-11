@@ -344,4 +344,12 @@ userSchema.statics.findByPhone = async function (phone) {
   return await this.findOne({ phone });
 };
 
+// ── Indexes ────────────────────────────────────────────────────────────────
+// These back the most frequent admin/list queries (getUsersByRole, doctor
+// approval lists, doctor location search). Without them every listing was a
+// full collection scan + in-memory sort.
+userSchema.index({ role: 1, createdAt: -1 });          // patient/doctor listing + sort
+userSchema.index({ role: 1, approvalStatus: 1 });      // doctor approval filtering
+userSchema.index({ role: 1, wilaya: 1, commune: 1 });  // doctor location search
+
 export const User = mongoose.model("User", userSchema);

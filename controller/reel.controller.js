@@ -13,6 +13,19 @@ import { createBulkNotification, createNotification } from "../utils/notify.js";
 import mongoose from "mongoose";
 
 /**
+ * Count comments for many reels in a single aggregation.
+ * Returns a Map<reelId(string), count>. Avoids one countDocuments per reel.
+ */
+const countCommentsByReel = async (reelIds) => {
+  if (!reelIds?.length) return new Map();
+  const rows = await ReelComment.aggregate([
+    { $match: { reel: { $in: reelIds.map((id) => new mongoose.Types.ObjectId(String(id))) } } },
+    { $group: { _id: "$reel", count: { $sum: 1 } } },
+  ]);
+  return new Map(rows.map((r) => [String(r._id), r.count]));
+};
+
+/**
  * Create a reel
  * form-data:
  *  - caption (text, optional)
@@ -112,23 +125,23 @@ export const getReels = catchAsync(async (req, res) => {
     Reel.countDocuments(query),
   ]);
 
-  // ✅ Add user-specific data (isLiked, commentsCount)
-  const reelsWithUserData = await Promise.all(
-    reels.map(async (reel) => {
-      const [isLiked, commentsCount] = await Promise.all([
-        reel.likes?.includes(userId.toString()),
-        ReelComment.countDocuments({ reel: reel._id }),
-      ]);
+  // Comment counts for the whole page in ONE aggregation (was one query per reel)
+  const commentCounts = await countCommentsByReel(reels.map((r) => r._id));
 
-      return {
-        ...reel,
-        isLiked: !!isLiked,
-        likesCount: reel.likes?.length || 0,
-        commentsCount,
-        sharesCount: reel.sharesCount || 0,
-      };
-    }),
-  );
+  // ✅ Add user-specific data (isLiked, commentsCount)
+  const reelsWithUserData = reels.map((reel) => {
+    const isLiked = reel.likes?.some(
+      (id) => id.toString() === userId.toString(),
+    );
+
+    return {
+      ...reel,
+      isLiked: !!isLiked,
+      likesCount: reel.likes?.length || 0,
+      commentsCount: commentCounts.get(String(reel._id)) || 0,
+      sharesCount: reel.sharesCount || 0,
+    };
+  });
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -187,25 +200,22 @@ export const getAllReels = catchAsync(async (req, res) => {
     Reel.countDocuments(finalQuery),
   ]);
 
-  const reelsWithUserData = await Promise.all(
-    reels.map(async (reel) => {
-      const [commentsCount] = await Promise.all([
-        ReelComment.countDocuments({ reel: reel._id }),
-      ]);
+  // Comment counts for the whole page in ONE aggregation (was one query per reel)
+  const commentCounts = await countCommentsByReel(reels.map((r) => r._id));
 
-      const isLiked = (reel.likes || []).some(
-        (id) => id.toString() === userId.toString(),
-      );
+  const reelsWithUserData = reels.map((reel) => {
+    const isLiked = (reel.likes || []).some(
+      (id) => id.toString() === userId.toString(),
+    );
 
-      return {
-        ...reel,
-        isLiked,
-        likesCount: reel.likes?.length || 0,
-        commentsCount,
-        sharesCount: reel.sharesCount || 0,
-      };
-    }),
-  );
+    return {
+      ...reel,
+      isLiked,
+      likesCount: reel.likes?.length || 0,
+      commentsCount: commentCounts.get(String(reel._id)) || 0,
+      sharesCount: reel.sharesCount || 0,
+    };
+  });
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

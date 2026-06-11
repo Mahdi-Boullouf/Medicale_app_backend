@@ -458,10 +458,7 @@ export const getMyAppointments = catchAsync(async (req, res) => {
   // 🔹 Status filter
   if (status && status !== "all") matchFilter.status = status;
 
-  // 🔹 Build aggregation pipeline
-  const pipeline = [
-    { $match: matchFilter },
-    // Populate doctor
+  const doctorLookup = [
     {
       $lookup: {
         from: "users",
@@ -471,7 +468,6 @@ export const getMyAppointments = catchAsync(async (req, res) => {
       },
     },
     { $unwind: "$doctor" },
-    // Populate patient
     {
       $lookup: {
         from: "users",
@@ -483,29 +479,38 @@ export const getMyAppointments = catchAsync(async (req, res) => {
     { $unwind: "$patient" },
   ];
 
-  // 🔹 Search filter
+  const pipeline = [{ $match: matchFilter }];
+  let total;
+
   if (search) {
+    // Search needs the joined names, so we must $lookup before filtering.
     const regex = new RegExp(search, "i");
-    pipeline.push({
+    pipeline.push(...doctorLookup, {
       $match: {
         $or: [
           { "doctor.fullName": regex },
           { "patient.fullName": regex },
-          { "bookedFor.dependentName": regex }, // if already enriched
+          { "bookedFor.dependentName": regex },
         ],
       },
     });
+
+    const countResult = await Appointment.aggregate([...pipeline, { $count: "total" }]);
+    total = countResult[0]?.total || 0;
+
+    pipeline.push({ $sort: { ...sort, appointmentDate: 1, time: 1 } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: pageLimit });
+  } else {
+    // No search: count straight off the (indexed) match, then paginate FIRST
+    // and only $lookup the page's rows instead of joining the whole match set.
+    total = await Appointment.countDocuments(matchFilter);
+
+    pipeline.push({ $sort: { ...sort, appointmentDate: 1, time: 1 } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: pageLimit });
+    pipeline.push(...doctorLookup);
   }
-
-  // 🔹 Count total after search
-  const countPipeline = [...pipeline, { $count: "total" }];
-  const countResult = await Appointment.aggregate(countPipeline);
-  const total = countResult[0]?.total || 0;
-
-  // 🔹 Sort + pagination
-  pipeline.push({ $sort: { ...sort, appointmentDate: 1, time: 1 } });
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: pageLimit });
 
   // 🔹 Project fields
   pipeline.push({
@@ -1041,6 +1046,9 @@ const getDateRangeForView = (view) => {
     start.setDate(start.getDate() - 6);
   } else if (view === "monthly") {
     start = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (view === "all") {
+    // No date range → include all completed appointments (all-time total)
+    return { start: null, end: null };
   }
 
   return { start, end };
@@ -1051,10 +1059,10 @@ export const getEarningsOverview = catchAsync(async (req, res) => {
   const userId = req.user._id;
   const view = (req.query.view || "monthly").toLowerCase();
 
-  if (!["daily", "weekly", "monthly"].includes(view)) {
+  if (!["daily", "weekly", "monthly", "all"].includes(view)) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      "view must be one of: daily, weekly, monthly",
+      "view must be one of: daily, weekly, monthly, all",
     );
   }
 
