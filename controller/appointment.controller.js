@@ -1028,6 +1028,9 @@ export const deleteAppointment = catchAsync(async (req, res) => {
   });
 });
 
+// Admin commission: flat fee earned per completed appointment (in DA).
+const ADMIN_FEE_PER_APPOINTMENT = 20;
+
 const getDateRangeForView = (view) => {
   const now = new Date();
   now.setMilliseconds(0);
@@ -1161,7 +1164,8 @@ export const getEarningsOverview = catchAsync(async (req, res) => {
       const fee = Number(doc.fees?.amount || 0);
       totalEarning += fee;
 
-      const commission = Number(appt.adminEarning || 0);
+      // Admin earns a flat 20 DA for every completed appointment.
+      const commission = ADMIN_FEE_PER_APPOINTMENT;
       totalAdminEarning += commission;
 
       if (appt.appointmentType === "video") {
