@@ -1219,3 +1219,88 @@ export const getEarningsOverview = catchAsync(async (req, res) => {
     "Only doctor or admin can view earnings overview",
   );
 });
+
+/**
+ * Admin: earnings for ONE doctor, optionally within a custom date range.
+ * GET /appointment/earnings/doctor/:doctorId?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * Both dates optional; omit them for all-time. endDate is inclusive (whole day).
+ */
+export const getDoctorEarnings = catchAsync(async (req, res) => {
+  const { doctorId } = req.params;
+  const { startDate, endDate } = req.query;
+
+  if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid doctor id");
+  }
+
+  const doctor = await User.findOne({ _id: doctorId, role: "doctor" })
+    .select("fullName specialty avatar fees email phone")
+    .lean();
+  if (!doctor) {
+    throw new AppError(httpStatus.NOT_FOUND, "Doctor not found");
+  }
+
+  const match = { status: "completed", doctor: doctor._id };
+
+  // Optional custom date range on appointmentDate.
+  let start = null;
+  let end = null;
+  if (startDate) {
+    start = new Date(startDate);
+    if (isNaN(start)) throw new AppError(httpStatus.BAD_REQUEST, "Invalid startDate");
+    start.setHours(0, 0, 0, 0);
+  }
+  if (endDate) {
+    end = new Date(endDate);
+    if (isNaN(end)) throw new AppError(httpStatus.BAD_REQUEST, "Invalid endDate");
+    end.setHours(23, 59, 59, 999);
+  }
+  if (start || end) {
+    match.appointmentDate = {};
+    if (start) match.appointmentDate.$gte = start;
+    if (end) match.appointmentDate.$lte = end;
+  }
+
+  const appointments = await Appointment.find(match)
+    .select("appointmentType appointmentDate")
+    .lean();
+
+  const fee = Number(doctor.fees?.amount || 0);
+  let totalAppointments = appointments.length;
+  let physicalCount = 0;
+  let videoCount = 0;
+
+  for (const appt of appointments) {
+    if (appt.appointmentType === "video") videoCount++;
+    else physicalCount++;
+  }
+
+  const doctorEarnings = totalAppointments * fee;
+  const adminEarnings = totalAppointments * ADMIN_FEE_PER_APPOINTMENT;
+
+  return sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Doctor earnings fetched",
+    data: {
+      doctor: {
+        _id: doctor._id,
+        fullName: doctor.fullName,
+        specialty: doctor.specialty,
+        avatar: doctor.avatar,
+        email: doctor.email,
+        phone: doctor.phone,
+        fee,
+      },
+      range: {
+        startDate: start ? start.toISOString() : null,
+        endDate: end ? end.toISOString() : null,
+      },
+      totalAppointments,
+      doctorEarnings,
+      adminEarnings,
+      physical: { count: physicalCount, earnings: physicalCount * fee },
+      video: { count: videoCount, earnings: videoCount * fee },
+    },
+  });
+});

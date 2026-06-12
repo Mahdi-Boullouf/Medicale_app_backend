@@ -3,13 +3,14 @@ import {
   createAppointment,
   getAvailableAppointments,
   getEarningsOverview,
+  getDoctorEarnings,
   getMyAppointments,
   updateAppointment,
   updateAppointmentStatus,
   deleteAppointment,
   confirmAppointment,
 } from "../controller/appointment.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { protect, isAdmin } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
 
 const router = express.Router();
@@ -72,5 +73,8 @@ router.patch(
 router.delete("/:id", protect, deleteAppointment);
 
 router.get("/earnings/overview", protect, getEarningsOverview);
- 
+
+// Admin: a single doctor's earnings, optional ?startDate=&endDate=
+router.get("/earnings/doctor/:doctorId", protect, isAdmin, getDoctorEarnings);
+
 export default router;
