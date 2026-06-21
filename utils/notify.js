@@ -65,6 +65,7 @@ export const createNotification = async ({
       "appointment_confirmed",
       "appointment_cancelled",
       "appointment_completed",
+      "appointment_rescheduled",
       "appointment_status_change",
       "appointment_reminder",
       "post_liked",

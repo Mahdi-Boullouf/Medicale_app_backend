@@ -717,6 +717,13 @@ export const updateAppointment = catchAsync(async (req, res) => {
       new Date(appointment.appointmentDate).getTime()) ||
     (updates.time && updates.time !== appointment.time);
 
+  // Capture the previous schedule before applying updates (used for the
+  // "appointment rescheduled" notification message).
+  const previousSchedule = {
+    date: appointment.appointmentDate,
+    time: appointment.time,
+  };
+
   if (scheduleChanged) {
     const conflict = await Appointment.findOne({
       doctor: appointment.doctor,
@@ -745,6 +752,63 @@ export const updateAppointment = catchAsync(async (req, res) => {
     { path: "doctor", select: "fullName role specialty avatar fees" },
     { path: "patient", select: "fullName role avatar" },
   ]);
+
+  // 🔔 Notify the other party when the appointment is rescheduled (date/time changed)
+  if (scheduleChanged) {
+    const fmtDate = (d) => {
+      try {
+        return new Date(d).toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      } catch {
+        return String(d);
+      }
+    };
+
+    const doctorId = appointment.doctor?._id;
+    const patientId = appointment.patient?._id;
+    const doctorName = appointment.doctor?.fullName || "Doctor";
+    const patientName = appointment.patient?.fullName || "Patient";
+
+    // Patient rescheduled -> notify doctor; doctor/admin rescheduled -> notify patient
+    const notifyPatient = role !== "patient";
+    const notifyUserId = notifyPatient ? patientId : doctorId;
+
+    const content = notifyPatient
+      ? `Dr. ${doctorName} rescheduled your appointment to ${fmtDate(finalDate)} at ${finalTime}.`
+      : `${patientName} rescheduled their appointment to ${fmtDate(finalDate)} at ${finalTime}.`;
+
+    if (notifyUserId) {
+      const notificationPayload = {
+        userId: notifyUserId,
+        fromUserId: userId,
+        type: "appointment_rescheduled",
+        title: "Appointment Rescheduled",
+        content,
+        appointmentId: appointment._id,
+        meta: {
+          newDate: finalDate,
+          newTime: finalTime,
+          previousDate: previousSchedule.date,
+          previousTime: previousSchedule.time,
+          doctorId,
+          doctorName,
+          patientName,
+          updatedBy: role,
+        },
+      };
+
+      await createNotification(notificationPayload);
+      // Emit socket event for real-time clients
+      io.to(notifyUserId.toString()).emit(
+        "appointment_rescheduled",
+        notificationPayload,
+      );
+    }
+  }
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -981,15 +1045,17 @@ export const deleteAppointment = catchAsync(async (req, res) => {
   const userId = req.user._id;
   const role = req.user.role;
 
-  const appointment = await Appointment.findById(id);
+  const appointment = await Appointment.findById(id)
+    .populate("doctor", "fullName role")
+    .populate("patient", "fullName role");
   if (!appointment) {
     throw new AppError(httpStatus.NOT_FOUND, "Appointment not found");
   }
 
   const isPatientOwner =
-    role === "patient" && String(appointment.patient) === String(userId);
+    role === "patient" && String(appointment.patient?._id) === String(userId);
   const isDoctorOwner =
-    role === "doctor" && String(appointment.doctor) === String(userId);
+    role === "doctor" && String(appointment.doctor?._id) === String(userId);
   const isAdmin = role === "admin";
 
   if (!isPatientOwner && !isDoctorOwner && !isAdmin) {
@@ -1006,6 +1072,12 @@ export const deleteAppointment = catchAsync(async (req, res) => {
     );
   }
 
+  // Capture parties before deletion so we can notify them afterwards.
+  const doctorId = appointment.doctor?._id;
+  const patientId = appointment.patient?._id;
+  const doctorName = appointment.doctor?.fullName || "Doctor";
+  const patientName = appointment.patient?.fullName || "Patient";
+
   for (const doc of appointment.medicalDocuments || []) {
     if (doc?.public_id) {
       await deleteFromCloudinary(doc.public_id).catch(() => { });
@@ -1019,6 +1091,36 @@ export const deleteAppointment = catchAsync(async (req, res) => {
   }
 
   await appointment.deleteOne();
+
+  // 🔔 Notify the affected party(ies) that the appointment was removed.
+  // A removal is effectively a cancellation from the recipient's perspective.
+  const notifyTargets = [];
+  if (isPatientOwner) {
+    notifyTargets.push({ userId: doctorId, content: `${patientName} removed their appointment.` });
+  } else if (isDoctorOwner) {
+    notifyTargets.push({ userId: patientId, content: `Dr. ${doctorName} removed your appointment.` });
+  } else {
+    // Admin removed it -> inform both parties
+    notifyTargets.push({ userId: patientId, content: `Your appointment with Dr. ${doctorName} has been removed.` });
+    notifyTargets.push({ userId: doctorId, content: `Your appointment with ${patientName} has been removed.` });
+  }
+
+  for (const target of notifyTargets) {
+    if (!target.userId) continue;
+    const notificationPayload = {
+      userId: target.userId,
+      fromUserId: userId,
+      type: "appointment_cancelled",
+      title: "Appointment Removed",
+      content: target.content,
+      meta: { doctorId, doctorName, patientName, removedBy: role },
+    };
+    await createNotification(notificationPayload);
+    io.to(target.userId.toString()).emit(
+      "appointment_cancelled",
+      notificationPayload,
+    );
+  }
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
