@@ -1198,7 +1198,10 @@ export const getEarningsOverview = catchAsync(async (req, res) => {
     const weeklyByWeekday = [0, 0, 0, 0, 0, 0, 0];
 
     for (const appt of appointments) {
-      const fee = Number(appt.doctor?.fees?.amount || 0);
+      // Use actual paid amount if available, otherwise fall back to doctor's current fee
+      const paidAmount = Number(appt.paidAmount || 0);
+      const doctorFee = Number(appt.doctor?.fees?.amount || 0);
+      const fee = paidAmount > 0 ? paidAmount : doctorFee;
       totalEarnings += fee;
 
       if (appt.appointmentType === "physical") {
