@@ -1,23 +1,24 @@
 import nodemailer from 'nodemailer';
 
 // ✅ Email Configuration
-const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_USER = process.env.EMAIL_USER;   // e.g. noreply@docmobidz.com
 const EMAIL_PASS = process.env.EMAIL_PASS;
+const EMAIL_FROM = process.env.EMAIL_FROM || `DocMobi <${EMAIL_USER}>`;
 
 // ✅ Main sendEmail Function
 export const sendEmail = async (to, subject, html) => {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,             // SSL on port 465
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASS,
     },
   });
-  
+
   await transporter.sendMail({
-    from: EMAIL_USER,
+    from: EMAIL_FROM,
     to,
     subject: subject || 'DocMobi Notification',
     html,
