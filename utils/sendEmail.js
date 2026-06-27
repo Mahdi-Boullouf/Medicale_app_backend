@@ -74,6 +74,61 @@ export const otpEmailTemplate = (otp, userName) => {
   `;
 };
 
+// ✅ Email Verification Link Template
+export const emailVerificationTemplate = (verificationLink, userName) => {
+  return `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: auto; border-radius: 12px; overflow: hidden; background-color: #f9fafb; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, #0B3267, #1664CD); padding: 30px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 28px; font-weight: bold;">DocMobi</h1>
+        <p style="margin-top: 8px; font-size: 16px; opacity: 0.9;">Verify your email address</p>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 40px 30px; background-color: #ffffff;">
+        <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
+          Hello <strong>${userName || 'there'}</strong>,
+        </p>
+
+        <p style="font-size: 16px; color: #374151; margin-bottom: 25px;">
+          Thank you for registering on DocMobi. Please click the button below to verify your email address and activate your account.
+        </p>
+
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${verificationLink}" target="_blank"
+            style="display: inline-block; padding: 16px 36px; background-color: #1664CD; color: #ffffff; font-size: 16px; font-weight: 600; border-radius: 10px; text-decoration: none; box-shadow: 0 4px 12px rgba(22, 100, 205, 0.35);">
+            ✅ Verify my email
+          </a>
+        </div>
+
+        <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 8px; margin: 25px 0;">
+          <p style="font-size: 14px; color: #92400E; margin: 0;">
+            ⚠️ This link will expire in <strong>24 hours</strong>.
+          </p>
+        </div>
+
+        <p style="font-size: 14px; color: #6B7280; text-align: center; margin-top: 20px;">
+          If the button doesn't work, copy and paste this link into your browser:
+        </p>
+        <p style="font-size: 13px; color: #1664CD; word-break: break-all; text-align: center;">
+          ${verificationLink}
+        </p>
+
+        <p style="font-size: 14px; color: #6B7280; margin-top: 25px;">
+          If you did not create an account, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color: #F3F4F6; text-align: center; padding: 20px; font-size: 13px; color: #9CA3AF;">
+        <p style="margin: 0;">This email was sent from DocMobi</p>
+        <p style="margin: 5px 0 0;">&copy; 2025 DocMobi. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+};
+
 // ✅ Contact Message Template
 export const sendMessageTemplate = ({ email, name, phone, message }) => {
   return `

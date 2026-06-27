@@ -228,10 +228,8 @@ const userSchema = new Schema(
       default: "pending",
     },
 
-    // verificationInfo: {
-    //   verified: { type: Boolean, default: false },
-    //   token: { type: String, default: "" },
-    // },
+    isEmailVerified: { type: Boolean, default: true },
+    emailVerificationToken: { type: String, default: "" },
 
     isDeleted: { type: Boolean, default: false },
 

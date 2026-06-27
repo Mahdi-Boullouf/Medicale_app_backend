@@ -4,7 +4,7 @@ import catchAsync from "../utils/catchAsync.js";
 import { generateOTP } from "../utils/commonMethod.js";
 import httpStatus from "http-status";
 import sendResponse from "../utils/sendResponse.js";
-import { sendEmail, otpEmailTemplate } from "../utils/sendEmail.js";
+import { sendEmail, otpEmailTemplate, emailVerificationTemplate } from "../utils/sendEmail.js";
 import { User } from "../model/user.model.js";
 import { ReferralCode } from "../model/referralCode.model.js";
 import mongoose from "mongoose";
@@ -199,6 +199,12 @@ export const register = catchAsync(async (req, res) => {
     const exp = Number(experienceYears);
     const expSafe = Number.isFinite(exp) && exp >= 0 ? exp : 0;
 
+    const emailVerifToken = createToken(
+      { email },
+      process.env.OTP_SECRET,
+      "24h",
+    );
+
     // create user
     console.log('🔵 [REGISTER] Creating user with role:', roleNormalized);
     const [newUser] = await User.create(
@@ -213,12 +219,13 @@ export const register = catchAsync(async (req, res) => {
           specialty: roleNormalized === "doctor" ? specialty : undefined,
           medicalLicenseNumber:
             roleNormalized === "doctor" ? medicalLicenseNumber : undefined,
-          wilaya: wilaya || "", // ✅ NEW
-          commune: commune || "", // ✅ NEW
-          verificationInfo: { token: "" },
+          wilaya: wilaya || "",
+          commune: commune || "",
           referralCode:
             referral && roleNormalized === "doctor" ? referral._id : null,
           approvalStatus: roleNormalized === "doctor" ? "pending" : "approved",
+          isEmailVerified: false,
+          emailVerificationToken: emailVerifToken,
         },
       ],
       { session },
@@ -304,11 +311,21 @@ export const register = catchAsync(async (req, res) => {
       console.log('🔵 [REGISTER] Skipping notifications (user is not a doctor)');
     }
 
+    // Send email verification link
+    try {
+      const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+      const verificationLink = `${BACKEND_URL}/api/v1/auth/verify-email?token=${emailVerifToken}`;
+      const emailHtml = emailVerificationTemplate(verificationLink, newUser.fullName);
+      await sendEmail(newUser.email, "Verify your email - DocMobi", emailHtml);
+    } catch (emailError) {
+      console.error("❌ [REGISTER] Failed to send verification email:", emailError.message);
+    }
+
     console.log('✅ [REGISTER] Registration completed successfully');
     sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
-      message: "Registered successfully",
+      message: "Registered successfully. Please check your email to verify your account.",
       data: null,
     });
   } catch (error) {
@@ -340,6 +357,14 @@ export const login = catchAsync(async (req, res) => {
     !(await User.isPasswordMatched(password, user.password))
   ) {
     throw new AppError(httpStatus.FORBIDDEN, "Password is not correct");
+  }
+
+  // Block login if email not verified
+  if (!user.isEmailVerified) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Please verify your email before logging in. Check your inbox for the verification code.",
+    );
   }
 
   // ✅ Enforce Doctor Approval Logic
@@ -388,6 +413,94 @@ export const login = catchAsync(async (req, res) => {
       _id: user._id,
       user: safeUser,
     },
+  });
+});
+
+const verifyEmailHtmlPage = (success, message) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${success ? "Email Verified" : "Verification Failed"} – DocMobi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f4ff; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 16px; padding: 48px 40px; max-width: 460px; width: 90%; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.1); }
+    .icon { font-size: 56px; margin-bottom: 20px; }
+    h1 { font-size: 24px; color: ${success ? "#0B3267" : "#dc2626"}; margin-bottom: 12px; }
+    p { font-size: 15px; color: #6b7280; line-height: 1.6; }
+    .badge { display: inline-block; margin-top: 28px; padding: 12px 28px; background: ${success ? "#1664CD" : "#dc2626"}; color: #fff; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">${success ? "✅" : "❌"}</div>
+    <h1>${success ? "Email Verified!" : "Verification Failed"}</h1>
+    <p>${message}</p>
+    <span class="badge">${success ? "You can now log in to the app" : "Please request a new verification link"}</span>
+  </div>
+</body>
+</html>`;
+
+export const verifyEmail = async (req, res) => {
+  const { token } = req.query;
+
+  const sendPage = (success, message) =>
+    res.status(success ? 200 : 400).send(verifyEmailHtmlPage(success, message));
+
+  if (!token) return sendPage(false, "Verification link is missing or invalid.");
+
+  let decoded;
+  try {
+    decoded = verifyToken(token, process.env.OTP_SECRET);
+  } catch {
+    return sendPage(false, "This verification link has expired or is invalid. Please request a new one.");
+  }
+
+  const user = await User.isUserExistsByEmail(decoded.email);
+  if (!user) return sendPage(false, "Account not found.");
+
+  if (user.isEmailVerified) {
+    return sendPage(true, "Your email is already verified. You can log in to the DocMobi app.");
+  }
+
+  await User.findByIdAndUpdate(user._id, {
+    isEmailVerified: true,
+    emailVerificationToken: "",
+  });
+
+  return sendPage(true, "Your email has been successfully verified. You can now log in to the DocMobi app.");
+};
+
+export const resendEmailVerification = catchAsync(async (req, res) => {
+  const { email } = req.body;
+
+  const user = await User.isUserExistsByEmail(email);
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, "User not found");
+
+  if (user.isEmailVerified) {
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Email already verified",
+      data: null,
+    });
+  }
+
+  const emailVerifToken = createToken({ email }, process.env.OTP_SECRET, "24h");
+  await User.findByIdAndUpdate(user._id, { emailVerificationToken: emailVerifToken });
+
+  const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+  const verificationLink = `${BACKEND_URL}/api/v1/auth/verify-email?token=${emailVerifToken}`;
+  const emailHtml = emailVerificationTemplate(verificationLink, user.fullName);
+  await sendEmail(user.email, "Verify your email - DocMobi", emailHtml);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Verification link sent to your email",
+    data: null,
   });
 });
 
