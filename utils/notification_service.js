@@ -147,6 +147,12 @@ export const sendCallNotification = async (receiver, callData) => {
         notification.expiry = Math.floor(Date.now() / 1000) + 30;
         notification.priority = 10;
         notification.pushType = 'voip';
+        // CRITICAL for terminated-state calls: VoIP pushes MUST target the
+        // "<bundleId>.voip" topic, and the payload MUST carry the call data so
+        // the iOS PushKit handler can report an incoming call to CallKit.
+        // Previously both were missing, so calls never rang when the app was killed.
+        notification.topic = `${process.env.IOS_BUNDLE_ID || 'com.docmobi.ios'}.voip`;
+        notification.payload = { ...normalizedPayload };
         const response = await apnProvider.send(notification, token);
         if (response.failed.length > 0) {
           const failure = response.failed[0];
