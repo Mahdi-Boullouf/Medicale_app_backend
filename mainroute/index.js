@@ -14,6 +14,7 @@ import referralCodeRoute from "../route/referralCode.route.js";
 import appSettingRoute from "../route/appSeeting.route.js";
 import callRoute from "../route/call.route.js";
 import reportRoute from "../route/report.route.js"; // ✅ UGC Safety
+import youtubeLinksRoute from "../route/youtubeLinks.route.js";
 
 const router = express.Router();
 
@@ -55,6 +56,9 @@ router.use("/app-setting", appSettingRoute);
 
 // ✅ Report / UGC Safety routes
 router.use("/report", reportRoute);
+
+// "How it works" tutorial video links
+router.use("/youtube-links", youtubeLinksRoute);
 
 // ═══════════════════════════════════════════════════════════
 // 📋 Route Summary (for debugging):
