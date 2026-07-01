@@ -313,7 +313,8 @@ export const register = catchAsync(async (req, res) => {
 
     // Send email verification link
     try {
-      const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+      const BACKEND_URL =
+        process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
       const verificationLink = `${BACKEND_URL}/api/v1/auth/verify-email?token=${emailVerifToken}`;
       const emailHtml = emailVerificationTemplate(verificationLink, newUser.fullName);
       await sendEmail(newUser.email, "Verify your email - DocMobi", emailHtml);
@@ -491,7 +492,8 @@ export const resendEmailVerification = catchAsync(async (req, res) => {
   const emailVerifToken = createToken({ email }, process.env.OTP_SECRET, "24h");
   await User.findByIdAndUpdate(user._id, { emailVerificationToken: emailVerifToken });
 
-  const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+  const BACKEND_URL =
+    process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
   const verificationLink = `${BACKEND_URL}/api/v1/auth/verify-email?token=${emailVerifToken}`;
   const emailHtml = emailVerificationTemplate(verificationLink, user.fullName);
   await sendEmail(user.email, "Verify your email - DocMobi", emailHtml);
